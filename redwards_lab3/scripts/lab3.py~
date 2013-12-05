@@ -1,0 +1,255 @@
+#!/usr/bin/env python
+
+#Author: Robert Edwards
+#Lab 2 Codel
+
+#Imports
+
+import rospy
+import roslib
+
+roslib.load_manifest('redwards_lab2')
+
+import time
+import math
+
+from numpy import *
+
+from tf.transformations import euler_from_quaternion
+
+#Message Types
+from nav_msgs.msg import GridCells
+from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import Odometry
+
+from geometry_msgs.msg import Point
+from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Quaternion
+from geometry_msgs.msg import PoseWithCovarianceStamped
+
+from std_msgs.msg import Empty
+from kobuki_msgs.msg import BumperEvent
+
+grid = OccupancyGrid()
+mapData = []
+width = 0
+height = 0
+
+xInit = 0
+yInit = 0
+thetaInit = 0
+
+xEnd = 0
+yEnd = 0
+thetaEnd = 0
+
+noParent = 0
+
+def mapCallBack(data):
+    global mapData, grid
+    global width
+    global height
+    grid = data
+    mapData = data.data
+    width = data.info.width
+    height = data.info.height
+    
+
+def startCallBack(data):
+    px = data.pose.pose.position.x
+    py = data.pose.pose.position.y
+    quat = data.pose.pose.orientation
+    q = [quat.x, quat.y, quat.z, quat.w]
+    roll, pitch, yaw = euler_from_quaternion(q)
+    global xInit
+    global yInit
+    global thetaInit
+    xInit = px
+    yInit = py
+    thetaInit = yaw * 180.0 / math.pi
+
+def endCallBack(data):
+    px = data.pose.position.x
+    py = data.pose.position.y
+    quat = data.pose.orientation
+    q = [quat.x, quat.y, quat.z, quat.w]
+    roll, pitch, yaw = euler_from_quaternion(q)
+    global xEnd
+    global yEnd
+    global thetaEnd
+    xEnd = px
+    yEnd = py
+    thetaEnd = yaw * 180.0 / math.pi
+
+def publishPathCells(pathnodes):
+    pub = rospy.Publisher("/gridCellPath", GridCells)
+    cells = GridCells()
+    cells.header.frame_id = 'map'
+    cells.cell_width = 0.05
+    cells.cell_height = 0.05
+    for i in range(0, len(pathnodes)):
+	point = Point()
+	point.x = pathnodes[i].position[0] * 0.05 + 0.025
+	point.y = pathnodes[i].position[1] * 0.05 + 0.025
+	point.z = 0
+	cells.cells.append(point)
+    pub.publish(cells)
+    #rospy.sleep(1)
+
+def publishFrontierCells(frontier):
+    pub = rospy.Publisher("/gridCellFrontier", GridCells)
+    cells = GridCells()
+    cells.header.frame_id = 'map'
+    cells.cell_width = 0.05
+    cells.cell_height = 0.05
+    for i in range(0, len(frontier)):
+	point = frontier[i]
+	cells.cells.append(point)
+    pub.publish(cells)
+
+def publishFinalCells(path):
+    pub = rospy.Publisher("/gridCellFinal", GridCells)
+    cells = GridCells()
+    cells.header.frame_id = 'map'
+    cells.cell_width = 0.05
+    cells.cell_height = 0.05
+    for i in range(0, len(path)):
+	point = Point()
+	point.x = path[i][0] * 0.05 + 0.025 
+	point.y = path[i][1] * 0.05 + 0.025
+	point.z = 0
+	cells.cells.append(point)
+    pub.publish(cells)
+
+def publishTwist(u,w):
+    pub = rospy.Publisher('/cmd_vel_mux/input/teleop', Twist)
+    twist = Twist()
+    twist.linear.x = u; twist.linear.y = 0; twist.linear.z = 0
+    twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = w
+    pub.publish(twist)
+
+#getOdomData: creates the subscriber for the odometry data
+def getOdomData():
+    sub = rospy.Subscriber("/odom", Odometry, odomCallback)
+
+#OdomCallback: pulls the odometry data and finds the x position, y position, and angular displacement of the robot
+def odomCallback(data):
+    px = data.pose.pose.position.x
+    py = data.pose.pose.position.y
+    quat = data.pose.pose.orientation
+    q = [quat.x, quat.y, quat.z, quat.w]
+    roll, pitch, yaw = euler_from_quaternion(q)
+    global xPos
+    global yPos
+    global theta
+    xPos = px
+    yPos = py
+    theta = yaw * 180.0 / math.pi 
+
+def getMapData():
+    sub = rospy.Subscriber("/map", OccupancyGrid, mapCallBack)
+
+def getStartData():
+    sub = rospy.Subscriber("/initialPose", PoseWithCovarianceStamped, startCallBack)
+
+def getEndData():
+    sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, endCallBack)
+
+#node class for storing data for a given cell
+class Node:
+   
+    def __init__(self, xPos, yPos, parent, g, h, f):
+	self.position = [xPos, yPos]
+	self.parent = parent
+	self.g = g
+	self.h = h
+	self.f = f
+    #redefine the equality condition for a node
+    def __eq__(self, node):
+	#if the positions are the same, it's the same node
+	if (self.position[0] == node.position[0]) and (self.position[1] == node.position[1]):
+	    return True
+	else:
+	    return False
+    #obtains the frontiers for a given node at a resolution of 0.05 cm/cell, with diagonals
+    def getFrontiers(self): 
+	frontiers = []
+	frontiers.append(Node(self.position[0] - 1, self.position[1], self, self.g + 1, 0, 0))
+	frontiers.append(Node(self.position[0] + 1, self.position[1], self, self.g + 1, 0, 0))
+	frontiers.append(Node(self.position[0] - 1, self.position[1] + 1, \
+			    self, self.g + math.sqrt(2), 0, 0))
+	frontiers.append(Node(self.position[0] + 1, self.position[1] + 1, \
+			    self, self.g + math.sqrt(2), 0, 0))
+	frontiers.append(Node(self.position[0] - 1, self.position[1] - 1, \
+			    self, self.g + math.sqrt(2), 0, 0))
+	frontiers.append(Node(self.position[0] + 1, self.position[1] - 1, \
+			    self, self.g + math.sqrt(2), 0, 0))
+	frontiers.append(Node(self.position[0], self.position[1] + 1, self, self.g + 1, 0, 0))
+	frontiers.append(Node(self.position[0], self.position[1] - 1, self, self.g + 1, 0, 0))
+	return frontiers
+
+def reconstructPath(node):
+    path = []
+    while(node != None):
+	path.append([node.position[0], node.position[1]])
+	node = node.parent
+    publishFinalCells(path)
+    return path
+
+def aStarMapping(startx, starty, endx, endy):
+    closedNodes = []
+    openNodes = [] 
+    frontier = []  
+
+    initNode = Node(startx, starty, None, 0, 0, 0)
+    endNode = Node(endx, endy, None, 0, 0, 0)
+    initNode.h = math.sqrt(math.pow(endx - initNode.position[0], 2) + \
+		 math.pow(endy - initNode.position[1], 2))
+    initNode.f = initNode.g + initNode.h
+    openNodes.append(initNode)
+    while(len(openNodes) != 0):
+	frontiers = openNodes[0].getFrontiers()
+	publishFrontierCells(frontier)	
+	currentNode = openNodes[0]
+	print openNodes[0].position[0], " ",  openNodes[0].position[1]
+	closedNodes.append(openNodes[0])	
+	publishPathCells(closedNodes)	
+	if currentNode.__eq__(endNode):
+	    path = reconstructPath(currentNode)
+	    publishFinalCells(path)
+	    rospy.sleep(1)
+	    return currentNode
+	del openNodes[0]
+	#If the frontier value is unobstructed and unexplored, find the h, f and add it to openNodes
+        for i in range(0, len(frontiers)):
+	    occupiedCount = 0
+	    for j in range(-4, 5):
+		for k in range(-4, 5):
+		    occupiedCount += mapData[(frontiers[i].position[1] + j + 240) * width + (frontiers[i].position[0] + k + 240)]
+	    print "%f" % occupiedCount
+	    if (occupiedCount == 0):
+		if (mapData[(frontiers[i].position[1] + 240) * width + (frontiers[i].position[0] + 240)] != -1) and \
+		   (mapData[(frontiers[i].position[1] + 240) * width + (frontiers[i].position[0] + 240)] != 100) and \
+		   frontiers[i] not in closedNodes:
+		    frontiers[i].h = abs(math.sqrt(math.pow(abs(endx - frontiers[i].position[0]), 2) + math.pow(abs(endy - frontiers[i].position[1]), 2)))
+		    frontiers[i].f = frontiers[i].g + frontiers[i].h
+		    #print "%f" % frontiers[i].f
+		    if(frontiers[i] not in openNodes):
+			openNodes.append(frontiers[i])
+			frontier.append(Point(frontiers[i].position[0] * 0.05 + 0.025, frontiers[i].position[1] * 0.05 + 0.025, 0))
+		
+	#sort by f value to bring lowest to index 0
+	openNodes.sort(key = lambda node: node.f)
+	rospy.sleep(0.05)
+	
+#TO DO: finish up pathing around obstacles
+#	implement robot movement
+
+if __name__ == '__main__' :
+    rospy.init_node('redwards_lab3', anonymous=True)
+    getMapData()
+    aStarNode = aStarMapping(-100, 40, -60, 0)
+    fullPath = reconstructPath(aStarNode)
+    for i in range(0, len(fullPath)):
+	print fullPath[len(fullPath) - 1 - i]
+    rospy.sleep(1)
