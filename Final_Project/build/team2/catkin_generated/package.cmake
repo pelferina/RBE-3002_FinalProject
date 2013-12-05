@@ -1,0 +1,7 @@
+set(_CATKIN_CURRENT_PACKAGE "team2")
+set(team2_MAINTAINER "ayesha <ayesha@todo.todo>")
+set(team2_DEPRECATED "")
+set(team2_VERSION "0.0.0")
+set(team2_BUILD_DEPENDS "geometry_msgs" "kobuki_msgs" "map_msgs" "nav_msgs" "rospy" "sensor_msgs" "std_msgs")
+set(team2_RUN_DEPENDS "geometry_msgs" "kobuki_msgs" "map_msgs" "nav_msgs" "rospy" "sensor_msgs" "std_msgs")
+set(team2_BUILDTOOL_DEPENDS "catkin")

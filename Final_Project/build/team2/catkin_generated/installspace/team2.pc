@@ -1,0 +1,8 @@
+prefix=/home/ayesha/RBE-3002_FinalProject/Final_Project/install
+
+Name: team2
+Description: Description of team2
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/ayesha/RBE-3002_FinalProject/Final_Project/install/lib 
+Requires: 
