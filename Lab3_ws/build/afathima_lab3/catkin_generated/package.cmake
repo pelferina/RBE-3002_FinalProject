@@ -1,0 +1,7 @@
+set(_CATKIN_CURRENT_PACKAGE "afathima_lab3")
+set(afathima_lab3_MAINTAINER "ayesha <afathima@wpi.edu>")
+set(afathima_lab3_DEPRECATED "")
+set(afathima_lab3_VERSION "0.0.0")
+set(afathima_lab3_BUILD_DEPENDS "nav_msgs" "roscpp" "rospy" "std_msgs" "geometry_msgs" "sensor_msgs" "map_msgs" "kobuki_msgs")
+set(afathima_lab3_RUN_DEPENDS "nav_msgs" "roscpp" "rospy" "std_msgs" "sensor_msgs" "nav_msgs" "geometry_msgs" "kobuki_msgs" "map_msgs")
+set(afathima_lab3_BUILDTOOL_DEPENDS "catkin")

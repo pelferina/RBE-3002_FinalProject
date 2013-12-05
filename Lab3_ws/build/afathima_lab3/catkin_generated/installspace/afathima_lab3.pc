@@ -1,0 +1,8 @@
+prefix=/home/ayesha/Lab3_ws/install
+
+Name: afathima_lab3
+Description: Description of afathima_lab3
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/ayesha/Lab3_ws/install/lib 
+Requires: 
