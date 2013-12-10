@@ -33,6 +33,9 @@ costMapGrid = OccupancyGrid()
 
 threshold = 75
 
+allGroups = []
+largeGroups = []
+
 
 #Subscriber Functions
 def getOdomData():
@@ -42,7 +45,7 @@ def getMapData():
     sub = rospy.Subscriber("/map", OccupancyGrid, mapCallBack)
     
 def getGlobalCostmapData():
-    sub = rospy.Subscriber("/move_base/global_costmap/costmap", OccupancyGrid, mapCallBack)
+    sub = rospy.Subscriber("/move_base/global_costmap/costmap", OccupancyGrid, globalCostmapCallBack)
 
 #Subscriber Callback functions
 def mapCallBack(data):
@@ -75,6 +78,29 @@ def publishTwist(u,w):
     twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = w
     pub.publish(twist)
 
+
+#Cell class for storing position data
+class Cell:
+    def __init__(self, xPos, yPos):
+        self.x = xPos
+        self.y = yPos
+    
+    def __eq__(self, cell):
+        if self.x == cell.x and self.y == cell.y:
+            return True
+        else:
+            return False
+
+#Group class for storing cells in a given group
+class Group:
+    def __init__(self, num):
+        self.numGroup = num
+        self.cells = []
+        
+    def addCelltoGroup(self, cell):
+        self.cells.append(cell)
+        
+
 #evaluatePoints: can be used to find points containing obstacles in the global Costmap
 def evaluatePoints(staticMap, costMap):
     mapWidth = staticMap.info.width
@@ -82,6 +108,8 @@ def evaluatePoints(staticMap, costMap):
     mapOriginX = int(math.floor(costMap.info.origin.position.x * 20))
     mapOriginY = int(math.floor(costMap.info.origin.position.y * 20))
     potentialPoints = []
+    global largeGroups
+    global allGroups
     for i in range(0, mapWidth):
         for j in range(0, mapHeight):
             if costMap.data[(i * mapWidth) + j] > threshold:
@@ -91,7 +119,11 @@ def evaluatePoints(staticMap, costMap):
                         staticValue += staticMap.data[((i + k) * mapWidth) + j + k]
                 if staticValue <= 0:
                     points.append([j - mapOriginX, i - mapOriginY])
-                    
+
+def evaluateGroups(potentialPoints):
+    for i in range(0, len(potentialPoints)):
+        point = 
+        
 
 
 
