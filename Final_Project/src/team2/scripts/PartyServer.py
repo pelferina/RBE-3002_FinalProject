@@ -17,6 +17,7 @@ from geometry_msgs.msg import PointStamped
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Quaternion
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseStamped
 
 from nav_msgs.msg import GridCells
 from nav_msgs.msg import OccupancyGrid
@@ -77,6 +78,14 @@ def publishTwist(u,w):
     twist.linear.x = u; twist.linear.y = 0; twist.linear.z = 0
     twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = w
     pub.publish(twist)
+
+def publishGoal(xPos, yPos, angle):
+    pub = rospy.Publisher('/move_base_simple/goal', PoseStamped)
+    goal = PoseStamped()
+    goal.pose.position.x = xPos
+    goal.pose.position.y = yPos
+    #determine theta eventually
+    pub.publish(goal)
 
 
 #Cell class for storing position data
