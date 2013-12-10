@@ -34,6 +34,8 @@ costMapGrid = OccupancyGrid()
 
 threshold = 75
 
+groupCount = 0
+
 allGroups = []
 largeGroups = []
 
@@ -103,14 +105,14 @@ class Cell:
 #Group class for storing cells in a given group
 class Group:
     def __init__(self, num):
-        self.numGroup = num
+        self.index = num
         self.cells = []
         
     def addCelltoGroup(self, cell):
         self.cells.append(cell)
         
 
-#evaluatePoints: can be used to find points containing obstacles in the global Costmap
+#evaluatePoints: can be used to find points containing obstacles in the global costmap
 def evaluatePoints(staticMap, costMap):
     mapWidth = staticMap.info.width
     mapHeight = staticMap.info.height
@@ -127,14 +129,31 @@ def evaluatePoints(staticMap, costMap):
                     for l in range(-3, 4):
                         staticValue += staticMap.data[((i + k) * mapWidth) + j + k]
                 if staticValue <= 0:
-                    points.append([j - mapOriginX, i - mapOriginY])
+                    points.append(Cell(j - mapOriginX, i - mapOriginY))
+    return potentialPoints
 
 def evaluateGroups(potentialPoints):
+    global groupCount
     for i in range(0, len(potentialPoints)):
-        point = 
-        
-
-
+        if len(allGroups) == 0:
+            allGroups.append(Group(groupCount))
+            allGroups[0].addCelltoGroup(potentialPoints[i])
+            groupCount ++
+        else:
+            inclusive = 0
+            for j in range(0, len(allGroups)):
+                for k in range(0, len(allGroups[j].cells)):
+                    if potentialPoints[i].__eq__(allGroups[j].cells[k]):
+                        inclusive ++
+            if inclusive == 0:
+                for l in range(0, len(allGroups)):
+                    for m in range(0, len(allGroups[l].cells)):
+                        if ((potentialPoints[i].x < allGroups[l].cells[m].x + 3 and potentialPoints[i].x > allGroups[l].cells[m].x - 3) and
+                            (potentialPoints[i].y < allGroups[l].cells[m].x + 3 and potentialPoints[i].y > allGroups[l].cells[m].y - 3)):
+                            allGroups[l].allCelltoGroup(potentialPoints[i])
+                            l = len(allGroups)
+                            m = len(allGroups[l].cells)
+                            
 
 if __name__ == '__main__':
     try:
