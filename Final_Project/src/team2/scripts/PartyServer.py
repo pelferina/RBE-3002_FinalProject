@@ -2,7 +2,7 @@
 import rospy
 import roslib
 
-roslib.load_manifest('Final_Project')
+#roslib.load_manifest('Final_Project')
 
 import time
 import math
@@ -35,12 +35,12 @@ class Global:
         self.groupCount = 0
         self.allGroups = []
         self.largeGroups = []
-        self.xPos
-        self.yPos
-        self.theta
+        self.xPos = 0
+        self.yPos = 0
+        self.theta = 0
     
     #evaluatePoints: can be used to find points containing obstacles in the global costmap
-    def evaluatePoints():
+    def evaluatePoints(self):
         mapWidth = self.staticMapGrid.info.width
         mapHeight = self.staticMapGrid.info.height
         mapOriginX = int(math.floor(self.costMapGrid.info.origin.position.x * 20))
@@ -48,7 +48,7 @@ class Global:
         potentialPoints = []
         for i in range(0, mapWidth):
             for j in range(0, mapHeight):
-                if self.costMapGrid.data[(i * mapWidth) + j] > threshold:
+                if self.costMapGrid.data[(i * mapWidth) + j] > self.threshold:
                     staticValue = 0
                     for k in range(-3, 4):
                         for l in range(-3, 4):
@@ -98,7 +98,7 @@ class Global:
         for n in range(0, len(allGroups)):
             for o in range(0, len(allGroups[n].cells)):
                 if costMapGrid.data[((allGroups[n].cells[len(allGroups[n].cells) - 1 - o].y + mapOriginY) * mapWidth) + 
-                                    allGroups[n].cells[len(allGroups[n].cells) - 1 - o].x + mapOriginX] < threshold:
+                                    allGroups[n].cells[len(allGroups[n].cells) - 1 - o].x + mapOriginX] < self.threshold:
                     del allGroups[n].cells[len(allGroups[n].cells) - 1 - o]
             allGroups[n].computeCenterofGroup()
 
@@ -125,19 +125,22 @@ class Group:
         self.centerY = sumYpos / len(self.cells)
 
 class Subscriber:
+    
     def __init__(self):
-        getOdomData()
-        getStaticMapData()
-        getGlobalCostmapData()
+        self.getOdomData()
+        self.getStaticMapData()
+        self.getGlobalCostmapData()
     #Subscriber Functions
-    def getOdomData():
+    def getOdomData(data):
         sub = rospy.Subscriber("/odom", Odometry, odomCallback)
     
-    def getStaticMapData():
+    def getStaticMapData(data):
         sub = rospy.Subscriber("/map", OccupancyGrid, staticMapCallBack)
         
-    def getGlobalCostmapData():
+    def getGlobalCostmapData(data):
         sub = rospy.Subscriber("/move_base/global_costmap/costmap", OccupancyGrid, globalCostmapCallBack)
+    
+    
 
 class Publisher:
     #Publisher Functions
@@ -150,7 +153,7 @@ class Publisher:
         #determine theta eventually
         pub.publish(goal)
     
-    def publishCells(listOfCells):
+    def publishCells(self, listOfCells):
         pub = rospy.Publisher('/team2/cells_with_obstructions', GridCells)
         cells = GridCells()
         cells.header.frame_id = 'map'
@@ -207,7 +210,7 @@ if __name__ == '__main__':
     print len(g.staticMapGrid.data)
     print g.staticMapGrid.info.width
     while(1):
-        cells = g.evaluatePoints(staticMapGrid, costMapGrid)
+        cells = g.evaluatePoints()
         p.publishCells(cells)
         for i in range(0, len(cells)):
             print '[', cells[i].x, ' ', cells[i].y, ']'
