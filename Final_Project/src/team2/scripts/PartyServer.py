@@ -32,7 +32,7 @@ staticMapGrid = OccupancyGrid()
 
 costMapGrid = OccupancyGrid()
 
-threshold = 50
+threshold = 90
 
 groupCount = 0
 
@@ -94,12 +94,11 @@ def publishCells(listOfCells):
     cells.cell_height = 0.05
     for i in range(0, len(listOfCells)):
         point = Point()
-        point.x = (listOfCells[i].x) * 0.05 + 0.025
-        point.y = (listOfCells[i].y) * 0.05 + 0.025
+        point.x = (listOfCells[i].x * 0.05) + 0.025
+        point.y = (listOfCells[i].y * 0.05) + 0.025
         point.z = 0
         cells.cells.append(point)
     pub.publish(cells)
-    rospy.sleep(0.1)
 #Classes
 
 #Cell class: for storing position data of a given cell
@@ -122,8 +121,8 @@ class Group:
         self.centerX = 0
         self.centerY = 0
         
-    def addCelltoGroup(self, cell):
-        self.cells.append(cell)
+    def addCelltoGroup(self, cellx, celly):
+        self.cells.append(Cell(cellx, celly))
         
     def computeCenterofGroup(self):
         sumXpos = 0
@@ -149,25 +148,32 @@ def evaluatePoints(staticMap, costMap):
         for j in range(0, mapHeight):
             if costMap.data[(i * mapWidth) + j] > threshold:
                 staticValue = 0
-                for k in range(-3, 4):
-                    for l in range(-3, 4):
-                        staticValue += staticMap.data[((i + k) * mapWidth) + j + k]
-                if staticValue <= 0:
+                for k in range(-4, 5):
+                    for l in range(-4, 5):
+                        if staticMap.data[((i + k) * mapWidth) + j + k] > 0:
+                            staticValue = 1
+                            break
+                    else:
+                        continue
+                    break
+                if staticValue == 0:
                     potentialPoints.append(Cell(j + mapOriginX, i + mapOriginY))
     return potentialPoints
 
 #evaluateGroups
-def evaluateGroups(potentialPoints):
+def evaluateGroups(potentialPoints, costMap):
     global groupCount
-    mapWidth = costMapGrid.info.width
-    mapHeight = costMapGrid.info.height
-    mapOriginX = int(math.floor(costMapGrid.info.origin.position.x * 20))
-    mapOriginY = int(math.floor(costMapGrid.info.origin.position.y * 20))
+    mapWidth = costMap.info.width
+    mapHeight = costMap.info.height
+    mapOriginX = int(math.floor(costMap.info.origin.position.x * 20))
+    mapOriginY = int(math.floor(costMap.info.origin.position.y * 20))
     for i in range(0, len(potentialPoints)):
+        print 'Point:', i, potentialPoints[i].x, potentialPoints[i].y
         #If there are no groups, create one
         if len(allGroups) == 0:
             allGroups.append(Group(groupCount))
-            allGroups[0].addCelltoGroup(potentialPoints[i])
+            allGroups[0].addCelltoGroup(potentialPoints[i].x, potentialPoints[i].y)
+            print 'New group:', allGroups[0].index
             groupCount += 1
         else:
             inclusive = 0
@@ -179,24 +185,34 @@ def evaluateGroups(potentialPoints):
             #if not add it to the appropriate group
             if inclusive == 0:
                 notCloseEnough = 1 
+                print 'Groups:', len(allGroups)
                 for l in range(0, len(allGroups)):
-                    for m in range(0, len(allGroups[l].cells)):
+                    print ' Group #:', allGroups[l].index
+                    print ' Cells:', len(allGroups[l].cells)
+                    lenCells = len(allGroups[l].cells)
+                    for m in range(0, lenCells):
                         #if the cell is close enough to a group, add the cell to that group and move to the next cell
-                        if ((potentialPoints[i].x < allGroups[l].cells[m].x + 2 and potentialPoints[i].x > allGroups[l].cells[m].x - 2) and
-                            (potentialPoints[i].y < allGroups[l].cells[m].x + 2 and potentialPoints[i].y > allGroups[l].cells[m].y - 2)):
-                            allGroups[l].addCelltoGroup(potentialPoints[i])
+                        if ((potentialPoints[i].x < allGroups[l].cells[m].x + 5 and potentialPoints[i].x > allGroups[l].cells[m].x - 5) and
+                            (potentialPoints[i].y < allGroups[l].cells[m].y + 5 and potentialPoints[i].y > allGroups[l].cells[m].y - 5)):
+                            allGroups[l].addCelltoGroup(potentialPoints[i].x, potentialPoints[i].y)
                             notCloseEnough = 0
-                            m = len(allGroups[l].cells)
-                            l = len(allGroups)
-                #if not, add the cell to its own group and move to the next cell
+                            print '   Added to group', allGroups[l].index
+                            break
+                    else:
+                        continue
+                    break
+
+                #if not, add the cell to its own ghttp://wiki.ros.org/ROS/Tutorials/WritingPublisherSubscriber%28python%29roup and move to the next cell
                 if notCloseEnough == 1:
                     allGroups.append(Group(groupCount))
-                    allGroups[len(allGroups) - 1].addCelltoGroup(potentialPoints[i])
+                    allGroups[len(allGroups) - 1].addCelltoGroup(potentialPoints[i].x, potentialPoints[i].y)
+                    print 'New group:', allGroups[len(allGroups ) - 1].index
                     groupCount += 1
+                    
     #calculate the center of each of the groups
     for n in range(0, len(allGroups)):
         for o in range(0, len(allGroups[n].cells)):
-            if costMapGrid.data[((allGroups[n].cells[len(allGroups[n].cells) - 1 - o].y + mapOriginY) * mapWidth) + 
+            if costMap.data[((allGroups[n].cells[len(allGroups[n].cells) - 1 - o].y + mapOriginY) * mapWidth) + 
                                 allGroups[n].cells[len(allGroups[n].cells) - 1 - o].x + mapOriginX] < threshold:
                 del allGroups[n].cells[len(allGroups[n].cells) - 1 - o]
         allGroups[n].computeCenterofGroup()
@@ -212,8 +228,13 @@ if __name__ == '__main__':
         rand  = 0
     print len(staticMapGrid.data)
     print staticMapGrid.info.width
-    while(1):
-        cells = evaluatePoints(staticMapGrid, costMapGrid)
-        publishCells(cells)
-        for i in range(0, len(cells)):
-            print '[', cells[i].x, ' ', cells[i].y, ']'
+    cells = evaluatePoints(staticMapGrid, costMapGrid)
+    publishCells(cells)
+    for i in range(0, len(cells)):
+        print '[', cells[i].x, ' ', cells[i].y, ']'
+    print len(cells)
+    #evaluateGroups(cells, costMapGrid)
+    for i in range(0, len(allGroups)):
+        print 'Group:', allGroups[i].index
+        for j in range(0, len(allGroups[i].cells)):
+            print '[', allGroups[i].cells[j].x, ' ', allGroups[i].cells[j].y, ']'
