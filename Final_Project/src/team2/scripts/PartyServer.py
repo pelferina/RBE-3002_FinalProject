@@ -2,7 +2,7 @@
 import rospy
 import roslib
 
-roslib.load_manifest('redwards_lab3')
+roslib.load_manifest('Final_Project')
 
 import time
 import math
@@ -30,7 +30,7 @@ from kobuki_msgs.msg import BumperEvent
 
 staticMapGrid = OccupancyGrid()
 
-coststaticMapGrid = OccupancyGrid()
+costMapGrid = OccupancyGrid()
 
 threshold = 50
 
@@ -56,8 +56,8 @@ def staticMapCallBack(data):
     staticMapGrid = data
     
 def globalCostmapCallBack(data):
-    global coststaticMapGrid
-    coststaticMapGrid = data
+    global costMapGrid
+    costMapGrid = data
     
     
 def odomCallback(data):
@@ -85,7 +85,21 @@ def publishGoal(xPos, yPos, angle):
     goal.pose.position.y = yPos
     #determine theta eventually
     pub.publish(goal)
-
+    
+def publishCells(listOfCells):
+    pub = rospy.Publisher('/team2/cells_with_obstructions', GridCells)
+    cells = GridCells()
+    cells.header.frame_id = 'map'
+    cells.cell_width = 0.05
+    cells.cell_height = 0.05
+    for i in range(0, len(listOfCells)):
+        point = Point()
+        point.x = (listOfCells[i].x) * 0.05 + 0.025
+        point.y = (listOfCells[i].y) * 0.05 + 0.025
+        point.z = 0
+        cells.cells.append(point)
+    pub.publish(cells)
+    rospy.sleep(0.1)
 #Classes
 
 #Cell class: for storing position data of a given cell
@@ -139,7 +153,7 @@ def evaluatePoints(staticMap, costMap):
                     for l in range(-3, 4):
                         staticValue += staticMap.data[((i + k) * mapWidth) + j + k]
                 if staticValue <= 0:
-                    points.append(Cell(j - mapOriginX, i - mapOriginY))
+                    potentialPoints.append(Cell(j + mapOriginX, i + mapOriginY))
     return potentialPoints
 
 #evaluateGroups
@@ -154,14 +168,14 @@ def evaluateGroups(potentialPoints):
         if len(allGroups) == 0:
             allGroups.append(Group(groupCount))
             allGroups[0].addCelltoGroup(potentialPoints[i])
-            groupCount ++
+            groupCount += 1
         else:
             inclusive = 0
             #check if the cell is in a group already
             for j in range(0, len(allGroups)):
                 for k in range(0, len(allGroups[j].cells)):
                     if potentialPoints[i].__eq__(allGroups[j].cells[k]):
-                        inclusive ++
+                        inclusive += 1
             #if not add it to the appropriate group
             if inclusive == 0:
                 notCloseEnough = 1 
@@ -170,27 +184,36 @@ def evaluateGroups(potentialPoints):
                         #if the cell is close enough to a group, add the cell to that group and move to the next cell
                         if ((potentialPoints[i].x < allGroups[l].cells[m].x + 2 and potentialPoints[i].x > allGroups[l].cells[m].x - 2) and
                             (potentialPoints[i].y < allGroups[l].cells[m].x + 2 and potentialPoints[i].y > allGroups[l].cells[m].y - 2)):
-                            allGroups[l].allCelltoGroup(potentialPoints[i])
+                            allGroups[l].addCelltoGroup(potentialPoints[i])
                             notCloseEnough = 0
+                            m = len(allGroups[l].cells)
                             l = len(allGroups)
-                            m = len(allGroups[l].cells) 
                 #if not, add the cell to its own group and move to the next cell
                 if notCloseEnough == 1:
                     allGroups.append(Group(groupCount))
-                    allGroups[len(allGroups) - 1].allCelltoGroup(potentialPoints[i])
-                    groupCount ++
+                    allGroups[len(allGroups) - 1].addCelltoGroup(potentialPoints[i])
+                    groupCount += 1
     #calculate the center of each of the groups
     for n in range(0, len(allGroups)):
         for o in range(0, len(allGroups[n].cells)):
             if costMapGrid.data[((allGroups[n].cells[len(allGroups[n].cells) - 1 - o].y + mapOriginY) * mapWidth) + 
                                 allGroups[n].cells[len(allGroups[n].cells) - 1 - o].x + mapOriginX] < threshold:
-                allGroups[n].cells.del(len(allGroups[n].cells) - 1 - o)
+                del allGroups[n].cells[len(allGroups[n].cells) - 1 - o]
         allGroups[n].computeCenterofGroup()
         
 
 if __name__ == '__main__':
-    try:
-        
-        rospy.spin()
-    except rospy.ROSInterruptException:
-        pass
+    rospy.init_node('PartyServer', anonymous=True)
+    getStaticMapData()
+    getGlobalCostmapData()
+    getOdomData()
+    while(len(staticMapGrid.data) == 0 or
+          len(costMapGrid.data) == 0):
+        rand  = 0
+    print len(staticMapGrid.data)
+    print staticMapGrid.info.width
+    while(1):
+        cells = evaluatePoints(staticMapGrid, costMapGrid)
+        publishCells(cells)
+        for i in range(0, len(cells)):
+            print '[', cells[i].x, ' ', cells[i].y, ']'
