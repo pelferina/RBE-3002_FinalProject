@@ -45,7 +45,7 @@ class Global:
         self.xPos = 0
         self.yPos = 0
         self.theta = 0
-        self.groupThreshold = 10
+        self.groupThreshold = 15
     
     #evaluatePoints: can be used to find points containing obstacles in the global costmap
     def evaluatePoints(self):
@@ -84,6 +84,7 @@ class Global:
         for i in range(0, len(potentialPoints)):
             #If there are no groups, create one
             if len(self.allGroups) == 0:
+                print 'First Group'
                 self.allGroups.append(Group(self.groupCount))
                 self.allGroups[0].addCelltoGroup(potentialPoints[i])
                 self.groupCount += 1
@@ -104,8 +105,10 @@ class Global:
                     for l in range(0, len(self.allGroups)):
                         for m in range(0, len(self.allGroups[l].cells)):
                             #if the cell is close enough to a group, add the cell to that group and move to the next cell
-                            if ((self.allGroups[l].cells[m].x < potentialPoints[i].x + 1 and self.allGroups[l].cells[m].x > potentialPoints[i].x - 1) and
-                                (self.allGroups[l].cells[m].x < potentialPoints[i].y + 1 and self.allGroups[l].cells[m].y > potentialPoints[i].y - 1)):
+                            if ((self.allGroups[l].cells[m].x < potentialPoints[i].x + 2 and 
+                                 self.allGroups[l].cells[m].x > potentialPoints[i].x - 2) and
+                                (self.allGroups[l].cells[m].x < potentialPoints[i].y + 2 and 
+                                 self.allGroups[l].cells[m].y > potentialPoints[i].y - 2)):
                                 self.allGroups[l].addCelltoGroup(potentialPoints[i])
                                 notCloseEnough = 0
                                 break
@@ -115,13 +118,18 @@ class Global:
                     
                     #if not, add the cell to its own group and move to the next cell
                     if notCloseEnough == 1:
+                        #print 'New Group'
                         self.allGroups.append(Group(self.groupCount))
                         self.allGroups[len(self.allGroups) - 1].addCelltoGroup(potentialPoints[i])
                         self.groupCount += 1
+        print 'Groups prior to out of date deletion:', len(self.allGroups)
         
-        delOutofDateCells(self.allGroups, self.threshold)
-                    
-        for p in range(len(self.allGroups) - 1, -1, -1):
+        print 'Old Cells Deleted'
+        self.allGroups = delOutofDateCells(self.allGroups, self.threshold)
+        
+        print 'Groups prior to merging:', len(self.allGroups)
+        lenGroups = len(self.allGroups)
+        for p in range(lenGroups - 1, -1, -1):
             #print 'Groups =', len(self.allGroups), ', P = ', p
             #print 'Cells =', len(self.allGroups[p].cells)
             cellEqual = 0
@@ -131,8 +139,10 @@ class Global:
                     for q in range(0, len(self.allGroups[p].cells)):
                         for s in range(0, len(self.allGroups[r].cells)):
                             #print 'Cell', s, 'of group', r, 'against cell', q, 'of group', p
-                            if ((self.allGroups[r].cells[s].x < self.allGroups[p].cells[q].x + 2 and self.allGroups[r].cells[s].x > self.allGroups[p].cells[q].x - 2) and 
-                                (self.allGroups[r].cells[s].x < self.allGroups[p].cells[q].y + 2 and self.allGroups[r].cells[s].y > self.allGroups[p].cells[q].y - 2)):
+                            if ((self.allGroups[r].cells[s].x < self.allGroups[p].cells[q].x + 3 and 
+                                 self.allGroups[r].cells[s].x > self.allGroups[p].cells[q].x - 3) and 
+                                (self.allGroups[r].cells[s].y < self.allGroups[p].cells[q].y + 3 and 
+                                 self.allGroups[r].cells[s].y > self.allGroups[p].cells[q].y - 3)):
                                 cellEqual += 1
                                 if cellEqual >= 1:
                                     #print 'Appending groups together'
@@ -147,13 +157,17 @@ class Global:
                     break
                 #else:
                     #print 'Same Group. Repicking...'
+        print 'Merged groups:', len(self.allGroups)
         validity = 0
         for t in range(0, len(self.allGroups)):
             if checkIfValidGroup(self.allGroups[t]) > -1:
-                print 'INVALID'
-        delSmallGroups(self.allGroups, self.groupThreshold)
+                validity = 1
+        if validity == 1:
+            print 'INVALID'
+        self.allGroups = delSmallGroups(self.allGroups, self.groupThreshold)
             
-        print 'Groups:', len(self.allGroups)
+        print 'Groups after small deletion:', len(self.allGroups)
+        publishGroups(self.allGroups)
 
 g = Global()
 
@@ -274,7 +288,6 @@ def publishCells(listOfCells):
     mapOriginX = int(math.floor(staticMapGrid.info.origin.position.x * 20))
     mapOriginY = int(math.floor(staticMapGrid.info.origin.position.y * 20))
     
-    
     cells = GridCells()
     cells.header.frame_id = 'map'
     cells.cell_width = 0.05
@@ -285,6 +298,28 @@ def publishCells(listOfCells):
         point.y = ((listOfCells[i].y) * 0.05) + 0.025
         point.z = 0
         cells.cells.append(point)
+    pub.publish(cells)  
+
+def publishGroups(listOfGroups):
+    pub = rospy.Publisher('/team2/groups', GridCells)
+    
+    localMapOriginX = int(math.floor(localCostMapGrid.info.origin.position.x * 20))
+    localMapOriginY = int(math.floor(localCostMapGrid.info.origin.position.y * 20))
+    
+    mapOriginX = int(math.floor(staticMapGrid.info.origin.position.x * 20))
+    mapOriginY = int(math.floor(staticMapGrid.info.origin.position.y * 20))
+    
+    cells = GridCells()
+    cells.header.frame_id = 'map'
+    cells.cell_width = 0.05
+    cells.cell_height = 0.05
+    for i in range(0, len(listOfGroups)):
+        for j in range(0, len(listOfGroups[i].cells)):
+            point = Point()
+            point.x = ((listOfGroups[i].cells[j].x) * 0.05) + 0.025
+            point.y = ((listOfGroups[i].cells[j].y) * 0.05) + 0.025
+            point.z = 0
+            cells.cells.append(point)
     pub.publish(cells)  
 
 #Subscriber Callback functions
@@ -299,8 +334,6 @@ def localCostmapCallBack(data):
 def globalCostmapCallBack(data):
     global globalCostMapGrid
     globalCostMapGrid = data
-    
-    
 
 def globalCostmapUpdate(data):
     global globalCostMapUpdate
@@ -320,6 +353,7 @@ def globalCostmapUpdate(data):
     
 def odomCallback(data):
     global g
+    
     px = data.pose.pose.position.x
     py = data.pose.pose.position.y
     quat = data.pose.pose.orientation
@@ -332,28 +366,21 @@ def odomCallback(data):
 if __name__ == '__main__':
     rospy.init_node('PartyServer', anonymous=True)
     global g
+    
     getOdomData()
     getStaticMapData()
     getLocalCostmapData()
     getGlobalCostmapData()
     getGlobalUpdateData()
-    #p = Publisher()
+    
     while(len(staticMapGrid.data) == 0 or
           len(globalCostMapGrid.data) == 0):
         rand  = 0
-    #print len(staticMapGrid.data)
-    #print staticMapGrid.info.width
     while(1):
         cells = g.evaluatePoints()
         publishCells(cells)
-        #for i in range(0, len(cells)):
-        #    print '[', cells[i].x, ' ', cells[i].y, ']'
         oldData = globalCostMapGrid.data
         g.evaluateGroups(cells)
         while oldData == globalCostMapGrid.data:
             rand = 1
-            #print globalCostMapUpdate.data
-            
-            
-        print 'Change'
-        
+        print 'Costmap Updated'
