@@ -248,6 +248,12 @@ catkin_DIR:PATH=/opt/ros/hydro/share/catkin/cmake
 //The directory containing a CMake configuration file for cpp_common.
 cpp_common_DIR:PATH=/opt/ros/hydro/share/cpp_common/cmake
 
+//Value Computed by CMake
+exploration_BINARY_DIR:STATIC=/home/ayesha/RBE-3002_FinalProject/Final_Project/build/exploration
+
+//Value Computed by CMake
+exploration_SOURCE_DIR:STATIC=/home/ayesha/RBE-3002_FinalProject/Final_Project/src/exploration
+
 //The directory containing a CMake configuration file for gencpp.
 gencpp_DIR:PATH=/opt/ros/hydro/share/gencpp/cmake
 
