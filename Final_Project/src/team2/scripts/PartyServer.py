@@ -128,7 +128,7 @@ class Global:
                         else:
                             continue
                         break
-        print 'Points:', len(potentialPoints)
+        print 'Docking Points:', len(potentialPoints)
         return potentialPoints
     
     #evaluateGroups: used to take in points and group them together
@@ -140,7 +140,11 @@ class Global:
         mapOriginX = int(math.floor(globalCostMapGrid.info.origin.position.x * 20))
         mapOriginY = int(math.floor(globalCostMapGrid.info.origin.position.y * 20))
         
-        #For all points
+        #Delete any groups below a certain threshold. 
+        self.allGroups = delSmallGroups(self.allGroups, self.groupThreshold)
+                        
+        validity = 0
+        newGroups = []
         for i in range(0, len(potentialPoints)):
             #If there are no groups, create a new one
             if len(self.allGroups) == 0:
@@ -182,15 +186,11 @@ class Global:
                         self.allGroups.append(Group(self.groupCount))
                         self.allGroups[len(self.allGroups) - 1].addCelltoGroup(potentialPoints[i])
                         self.groupCount += 1
-        
-        print 'Groups prior to out of date deletion:', len(self.allGroups)
-        
-        #Delete any out of date cells.
-        self.allGroups = delOutofDateCells(self.allGroups, self.threshold)
-        
+                        
         #Merge any groups in range on one another
         print 'Groups prior to merging:', len(self.allGroups)
         lenGroups = len(self.allGroups)
+        
         for p in range(lenGroups - 1, -1, -1):
             cellEqual = 0
             for r in range(len(self.allGroups) - 1, -1, -1):
@@ -214,22 +214,27 @@ class Global:
                     break
         print 'Merged groups:', len(self.allGroups)
         #Check the validity of the groups
-        validity = 0
-        for t in range(0, len(self.allGroups)):
-            if checkIfValidGroup(self.allGroups[t]) > -1:
-                validity = 1
-        if validity == 1:
-            print 'INVALID'
+        
+                
+            
+        #Delete any out of date cells.
+        self.allGroups = delOutofDateCells(self.allGroups, self.threshold)
             
         #Delete any groups below a certain threshold. 
         self.allGroups = delSmallGroups(self.allGroups, self.groupThreshold)    
+        
+        #Reset a groups given docking points
+        for k in range(0, len(self.allGroups)):
+            self.allGroups[k].dockingPoints = []
+            
+        #Append the recalculated docking points to the appropriate groups in an appropriate manner
         for j in range(0, len(dockingPoints)):
             for k in range(0, len(self.allGroups)):
                 for l in range(0, len(self.allGroups[k].cells)):
                     if((math.sqrt(math.pow(self.allGroups[k].cells[l].x - dockingPoints[j].x, 2) + 
                                  math.pow(self.allGroups[k].cells[l].x - dockingPoints[j].x, 2)) < 10) and
                        (math.sqrt(math.pow(self.allGroups[k].cells[l].x - dockingPoints[j].x, 2) + 
-                                 math.pow(self.allGroups[k].cells[l].x - dockingPoints[j].x, 2)) > 5)):
+                                 math.pow(self.allGroups[k].cells[l].x - dockingPoints[j].x, 2)) > 9)):
                         self.allGroups[k].dockingPoints.append(dockingPoints[j])
                         break
                 else:
@@ -240,6 +245,59 @@ class Global:
         
         #Publish the groups to RViz
         publishGroups(self.allGroups)
+        publishDockingPoints(self.allGroups)
+    
+    def createGroups(self, potentialPoints):
+        #Map Constants
+        mapWidth = globalCostMapGrid.info.width
+        mapHeight = globalCostMapGrid.info.height
+        mapOriginX = int(math.floor(globalCostMapGrid.info.origin.position.x * 20))
+        mapOriginY = int(math.floor(globalCostMapGrid.info.origin.position.y * 20))
+        
+        groups = []
+        #For all points
+        for i in range(0, len(potentialPoints)):
+            #If there are no groups, create a new one
+            if len(self.allGroups) == 0:
+                print 'First Group'
+                groups.append(Group(self.groupCount))
+                groups[0].addCelltoGroup(potentialPoints[i])
+                self.groupCount += 1
+            else:
+                inclusive = 0
+                #If the cell is already in a group, discard the point
+                for j in range(0, len(groups)):
+                    for k in range(0, len(groups[j].cells)):
+                        if potentialPoints[i].__eq__(groups[j].cells[k]):
+                            inclusive = 1
+                            break
+                    else:
+                        continue
+                    break
+                #If it is not in a group, check if it is close enough to a given group.
+                if inclusive == 0:
+                    notCloseEnough = 1 
+                    for l in range(0, len(groups)):
+                        for m in range(0, len(groups[l].cells)):
+                            #if the cell is close enough to a group, add the cell to that group and move to the next cell
+                            if ((groups[l].cells[m].x < potentialPoints[i].x + 2 and 
+                                 groups[l].cells[m].x > potentialPoints[i].x - 2) and
+                                (groups[l].cells[m].x < potentialPoints[i].y + 2 and 
+                                 groups[l].cells[m].y > potentialPoints[i].y - 2)):
+                                groups[l].addCelltoGroup(potentialPoints[i])
+                                notCloseEnough = 0
+                                break
+                        else:
+                            continue
+                        break
+                    
+                    #If the cell is not close enough, create a new group and add the cell to it.
+                    if notCloseEnough == 1:
+                        #print 'New Group'
+                        groups.append(Group(self.groupCount))
+                        groups[len(groups) - 1].addCelltoGroup(potentialPoints[i])
+                        self.groupCount += 1
+        return groups
 
 g = Global()
 
@@ -381,7 +439,7 @@ def publishGroups(listOfGroups):
             cells.cells.append(point)
     pub.publish(cells)  
 
-def publishDockingPoints(listOfCells):
+def publishDockingPoints(listOfGroups):
     pub = rospy.Publisher('/team2/docking_points', GridCells)
     
     mapOriginX = int(math.floor(staticMapGrid.info.origin.position.x * 20))
@@ -391,12 +449,13 @@ def publishDockingPoints(listOfCells):
     cells.header.frame_id = 'map'
     cells.cell_width = 0.05
     cells.cell_height = 0.05
-    for i in range(0, len(listOfCells)):
-        point = Point()
-        point.x = ((listOfCells[i].x) * 0.05) + 0.025
-        point.y = ((listOfCells[i].y) * 0.05) + 0.025
-        point.z = 0
-        cells.cells.append(point)
+    for i in range(0, len(listOfGroups)):
+        for j in range(0, len(listOfGroups[i].dockingPoints)):
+            point = Point()
+            point.x = ((listOfGroups[i].dockingPoints[j].x) * 0.05) + 0.025
+            point.y = ((listOfGroups[i].dockingPoints[j].y) * 0.05) + 0.025
+            point.z = 0
+            cells.cells.append(point)
     pub.publish(cells)  
     
 
@@ -451,7 +510,6 @@ if __name__ == '__main__':
         cells = g.evaluatePoints()
         dockCells = g.evaluateDockingPoints()
         publishCells(cells)
-        publishDockingPoints(dockCells)
         g.evaluateGroups(cells, dockCells)
         oldData = globalCostMapGrid.data
         while oldData == globalCostMapGrid.data:
