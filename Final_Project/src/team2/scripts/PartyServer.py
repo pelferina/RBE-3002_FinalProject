@@ -239,11 +239,11 @@ class Global:
                     continue
                 break
         
-                        
+        self.largeGroups = self.allGroups
         
         #Publish the groups to RViz
-        publishGroups(self.allGroups)
-        publishDockingPoints(self.allGroups)
+        publishGroups(self.largeGroups)
+        publishDockingPoints(self.largeGroups)
     
     def delSmallGroups(self):
         for i in range(len(self.allGroups) - 1, -1, -1):
@@ -655,6 +655,11 @@ def globalCostmapUpdate(data):
                 mapData[((y + data.y) * mapWidth) + x + data.x] = data.data[(y * data.width) + x]
         globalCostMapGrid.data = tuple(mapData)
     
+    cells = g.evaluatePoints()
+    dockCells = g.evaluateDockingPoints()
+    publishCells(cells)
+    g.evaluateGroups(cells, dockCells)
+    
 def odomCallback(data):
     global g
     global f
@@ -684,12 +689,11 @@ if __name__ == '__main__':
           len(globalCostMapGrid.data) == 0):
         rand  = 0
     while(1):
-#        cells = g.evaluatePoints()
-#        dockCells = g.evaluateDockingPoints()
-#        publishCells(cells)
-#        g.evaluateGroups(cells, dockCells)
-#        oldData = globalCostMapGrid.data
-#        while oldData == globalCostMapGrid.data:
-#            rand = 1
-#        print 'Costmap Updated'
-#        rand = 0
+        cells = g.evaluatePoints()
+        dockCells = g.evaluateDockingPoints()
+        publishCells(cells)
+        g.evaluateGroups(cells, dockCells)
+        oldData = globalCostMapGrid.data
+        while oldData == globalCostMapGrid.data:
+            rand = 1
+        print 'Costmap Updated'
